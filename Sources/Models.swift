@@ -1,7 +1,7 @@
 import Foundation
 import CoreGraphics
 
-let toolVersion = "0.2.0"
+let toolVersion = "0.2.1"
 let schemaVersion = 2
 
 struct ToolError: Error, LocalizedError, Codable {

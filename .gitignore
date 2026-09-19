@@ -1,4 +1,6 @@
 /build/
+/.build/
+/.swiftpm/
 /Tests/.tmp/
 __pycache__/
 *.pyc

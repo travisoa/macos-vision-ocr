@@ -5,17 +5,34 @@
 ## 构建与安装
 
 - 普通 OCR / PDF 文本提取需要 **macOS 13+**；实验性表格识别需要 **macOS 26+**。
-- 编译需要 **Xcode 26 或相应 Command Line Tools 的 Swift 编译器和 macOS 26 SDK**，其中包含 `RecognizeDocumentsRequest`。较低部署目标不能替代新 SDK。
+- 编译需要 **Swift 6.2+、Xcode 26 或相应 Command Line Tools 的 macOS 26+ SDK**，其中包含 `RecognizeDocumentsRequest`。`Package.swift` 保留 macOS 13 部署目标和 Swift 5 语言模式；工具链版本不等于最低运行系统版本。
 - 产物使用当前机器架构，**不是 Universal Binary**。Intel 与 Apple Silicon 的可用加速设备由系统决定，不保证使用 ANE。
 
 ```bash
-./build.sh                       # 只构建到 ./build/ocr，不安装
+./build.sh                       # SwiftPM debug 增量构建，复制到 ./build/ocr
+./build.sh --release             # 显式构建优化版
 ./build/ocr --version
-./build.sh --install              # 构建并安装到 ~/.local/bin/ocr
+./build.sh --install             # 默认构建 release，并原子安装到 ~/.local/bin/ocr
 ./build.sh --install /usr/local/bin/ocr
 ```
 
-仍接受 `./build.sh /其他路径/ocr` 形式的显式安装路径。安装时先生成完整临时文件，再替换目标。请确保安装目录在 `PATH` 中；下列 `ocr` 也可替换为 `./build/ocr`。
+仍接受 `./build.sh /其他路径/ocr` 形式的显式安装路径。开发构建默认 debug；安装默认 release，也可显式选择配置。安装时先生成完整临时文件，再替换目标。请确保安装目录在 `PATH` 中；下列 `ocr` 也可替换为 `./build/ocr`。
+
+## 开发、Run 与诊断
+
+项目是一个无外部依赖的 SwiftPM 命令行包，产品名为 `ocr`，可在 Xcode 中打开 `Package.swift`。普通终端支持 `swift build`、`swift run ocr --help` 与 `swift test`。项目脚本统一将 SwiftPM 缓存和编译中间文件放在 `.build/` 中。
+
+```bash
+./script/build_and_run.sh                            # 构建 debug 并显示帮助
+./script/build_and_run.sh -- --json 图片.png          # 转发 OCR 参数
+./script/build_and_run.sh --verify                   # 验证短命 CLI 的版本输出与退出状态
+./script/build_and_run.sh --debug -- --json 图片.png  # LLDB 调试
+./script/doctor.sh                                   # 检查系统、工具链与产物，不运行 OCR
+```
+
+Codex 的 Run 动作由 `.codex/environments/environment.toml` 指向同一个运行脚本。脚本构建日志写入 stderr，OCR 输出保留在 stdout；无参数时仅显示帮助。CLI 没有常驻应用进程，运行入口不会按名称终止其他 `ocr` 任务；中断作用于当前启动的进程。构建或调试不隐式安装命令。
+
+SwiftPM 的 manifest 沙箱与 Vision 的 ANE 访问限制是不同的环境问题。若当前 Agent 沙箱不允许 SwiftPM 启动自己的沙箱或访问必要服务，应按当前环境申请执行权限；项目脚本不会自动关闭沙箱。`doctor.sh` 的静态环境检查通过不代表 OCR 模型访问权限已通过。
 
 ## 常用命令
 
@@ -86,7 +103,7 @@ ocr -- --以减号开头的文件.png
 [
   {
     "schemaVersion": 2,
-    "toolVersion": "0.2.0",
+    "toolVersion": "0.2.1",
     "file": "标准.pdf",
     "pages": [
       {
@@ -154,8 +171,9 @@ CSV 是固定列长表：`file,page,table,row,column,row_span,column_span,text`�
 ## 验证与项目结构
 
 ```bash
-./Tests/run.sh
-# 使用已构建二进制，跳过构建步骤：
+./Tests/run.sh                         # XCTest + Python CLI 集成测试
+./script/swiftpm.sh test --filter GeometryTests/testGeometry
+# 使用指定二进制做 CLI 集成验证，XCTest 仍测试当前源码：
 OCR_BINARY="$PWD/build/ocr" ./Tests/run.sh
 ```
 
@@ -167,6 +185,8 @@ OCR_BINARY="$PWD/build/ocr" ./Tests/run.sh
 ./Tests/ocr_smoke.sh
 ```
 
+默认验证最近一次 `build.sh` 生成的 `build/ocr`；也可通过 `OCR_BINARY` 指定其他已有产物。
+
 它生成小型中英文图片和扫描 PDF，实际调用 OCR，检查候选/置信度、旋转与页号、区域坐标、表格 JSON / CSV。该固定样本已在本机正常权限下通过，但不代表真实复杂文档准确率；当前受限 sandbox 可能报 `nilError`，应通过当前环境权限机制运行，不能擅自关闭 sandbox。
 
-`ocr.swift` 为命令入口，`Sources/` 按参数、几何、识别、处理流程和输出分工；`Tests/` 存放无模型回归测试。`build/` 仅用于本机构建产物及编译缓存。
+`Package.swift` 定义 `OCR` 可执行目标及 `OCRTests` 原生测试目标；`ocr.swift` 为命令入口，`Sources/` 按参数、几何、识别、处理流程和输出分工。`Tests/` 存放 XCTest、CLI 回归与显式运行的 OCR 冒烟测试。`.build/` 存放增量编译缓存，`build/ocr` 是供手动调用的暂存产物；运行脚本和安装直接使用本次配置的 SwiftPM 产物，两处构建目录均不入库。

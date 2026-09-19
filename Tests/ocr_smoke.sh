@@ -4,9 +4,14 @@ set -euo pipefail
 DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OCR_SMOKE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/ocr-smoke.XXXXXX")"
 trap 'rm -rf "$OCR_SMOKE_DIR"' EXIT
-OCR_SMOKE_BINARY="${OCR_BINARY:-$DIR/build/ocr}"
-[[ -x "$OCR_SMOKE_BINARY" ]] || { echo "Run ./build.sh first." >&2; exit 1; }
-swiftc -module-cache-path "$DIR/build/cache" "$DIR/Tests/fixtures/SmokeFixture.swift" -o "$OCR_SMOKE_DIR/fixtures"
+if [[ -n "${OCR_BINARY:-}" ]]; then
+  OCR_SMOKE_BINARY="$OCR_BINARY"
+else
+  OCR_SMOKE_BINARY="$DIR/build/ocr"
+fi
+[[ -x "$OCR_SMOKE_BINARY" ]] || { echo "Run ./build.sh first, or set OCR_BINARY to an existing executable." >&2; exit 1; }
+mkdir -p "$DIR/.build/fixture-cache"
+xcrun swiftc -module-cache-path "$DIR/.build/fixture-cache" "$DIR/Tests/fixtures/SmokeFixture.swift" -o "$OCR_SMOKE_DIR/fixtures"
 "$OCR_SMOKE_DIR/fixtures" "$OCR_SMOKE_DIR" >/dev/null
 "$OCR_SMOKE_BINARY" --json --no-correction --candidates 2 "$OCR_SMOKE_DIR/sample.png" > "$OCR_SMOKE_DIR/image.json"
 "$OCR_SMOKE_BINARY" --jsonl --pages 2 --dpi 144 --rotate 270 "$OCR_SMOKE_DIR/scanned.pdf" > "$OCR_SMOKE_DIR/pdf.jsonl"

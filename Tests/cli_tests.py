@@ -62,7 +62,7 @@ class CLITests(unittest.TestCase):
 
     def test_help_and_version(self):
         self.assertIn("--pages", self.call("--help").stdout)
-        self.assertIn("0.2.0", self.call("--version").stdout)
+        self.assertRegex(self.call("--version").stdout.strip(), r"^ocr \d+\.\d+\.\d+ \(schema 2\)$")
 
     def test_dpi_rejects_invalid_and_unbounded_values(self):
         for value in ["nan", "inf", "-inf", "-1", "0", "banana"]:
